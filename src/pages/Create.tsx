@@ -1,15 +1,32 @@
-import { useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { useEffect, useRef, useState } from "react";
+import { Link, useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
-import { Sparkles, Loader2, Coins, Music2 } from "lucide-react";
+import { Sparkles, Loader2, Coins, Music2, Play, Pause, Lock, Download, Library as LibraryIcon } from "lucide-react";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import { Waveform } from "@/components/Waveform";
+import cover1 from "@/assets/cover-1.jpg";
+import cover2 from "@/assets/cover-2.jpg";
+import cover3 from "@/assets/cover-3.jpg";
+
+const COVERS: Record<string, string> = { "cover-1": cover1, "cover-2": cover2, "cover-3": cover3 };
+
+type GeneratedTrack = {
+  id: string;
+  title: string;
+  genre: string | null;
+  mood: string | null;
+  prompt: string;
+  audio_url: string | null;
+  cover_url: string | null;
+  duration_seconds: number;
+  is_unlocked: boolean;
+};
 
 const GENRES = ["Afrobeat", "Drill", "Gospel", "Rap", "RnB", "Amapiano", "Reggae", "Pop", "Lo-fi", "House"];
 const MOODS = ["Happy", "Sad", "Spiritual", "Party", "Romantic", "Dark", "Hopeful", "Energetic"];
