@@ -412,9 +412,14 @@ const Create = () => {
                 <Waveform bars={32} seed={`${genre}${mood}${tempo}`} playing={generating} className="h-12" />
               </div>
               {generating && (
-                <div className="mt-3 text-xs text-muted-foreground flex items-center gap-2">
-                  <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                  Composing your track…
+                <div className="mt-3 space-y-1">
+                  <div className="text-xs text-muted-foreground flex items-center gap-2">
+                    <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                    Composing your track… {fmt(elapsed)}
+                  </div>
+                  <div className="text-[11px] text-muted-foreground/70">
+                    Real AI generation usually takes 60–120s. Hang tight.
+                  </div>
                 </div>
               )}
             </div>
