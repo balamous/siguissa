@@ -97,4 +97,5 @@ export const Waveform = forwardRef<HTMLDivElement, WaveformProps>(({
       })}
     </div>
   );
-};
+});
+Waveform.displayName = "Waveform";
