@@ -36,14 +36,17 @@ const Create = () => {
   const [generating, setGenerating] = useState(false);
 
   const cost = profile?.is_premium ? 3 : 5;
-  const canGenerate = (profile?.credits ?? 0) >= cost && prompt.trim().length >= 3;
+  const hasCredits = (profile?.credits ?? 0) >= cost;
+  const promptOk = prompt.trim().length >= 3;
 
   const handleGenerate = async () => {
-    if (!canGenerate) {
-      if ((profile?.credits ?? 0) < cost) {
-        toast.error("Not enough credits", { description: "Top up to keep creating." });
-        navigate("/pricing");
-      }
+    if (!promptOk) {
+      toast.error("Describe your track first", { description: "Write at least 3 characters." });
+      return;
+    }
+    if (!hasCredits) {
+      toast.error("Not enough credits", { description: "Top up to keep creating." });
+      navigate("/pricing");
       return;
     }
     setGenerating(true);
@@ -166,7 +169,7 @@ const Create = () => {
               variant="hero"
               size="xl"
               className="w-full mt-5"
-              disabled={!canGenerate || generating}
+              disabled={generating}
             >
               {generating ? (
                 <><Loader2 className="h-5 w-5 animate-spin" /> Generating...</>
