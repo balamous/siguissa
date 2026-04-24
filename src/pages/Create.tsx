@@ -57,7 +57,19 @@ const Create = () => {
   const [currentTime, setCurrentTime] = useState(0);
   const [duration, setDuration] = useState(0);
   const [unlocking, setUnlocking] = useState(false);
+  const [elapsed, setElapsed] = useState(0);
   const audioRef = useRef<HTMLAudioElement | null>(null);
+
+  // Count elapsed seconds while generating
+  useEffect(() => {
+    if (!generating) {
+      setElapsed(0);
+      return;
+    }
+    const start = Date.now();
+    const id = setInterval(() => setElapsed(Math.floor((Date.now() - start) / 1000)), 250);
+    return () => clearInterval(id);
+  }, [generating]);
 
   const cost = profile?.is_premium ? 3 : 5;
   const unlockCost = profile?.is_premium ? 0 : 3;
