@@ -11,13 +11,14 @@ const corsHeaders = {
 
 const GENERATION_COST = 5;
 
-// Pool of royalty-free / public sample tracks (Pixabay-style hosted, accessible via fetch).
+// Pool of royalty-free sample tracks. SoundHelix serves audio with permissive CORS,
+// so the <audio> element can load and play them in the browser without issues.
 // In production this is replaced by the AI provider's returned URL.
 const SAMPLE_TRACKS = [
-  { url: "https://cdn.pixabay.com/audio/2024/02/05/audio_27cd60d22a.mp3", duration: 124 },
-  { url: "https://cdn.pixabay.com/audio/2023/08/02/audio_2d62a0f49d.mp3", duration: 138 },
-  { url: "https://cdn.pixabay.com/audio/2022/10/30/audio_347111d564.mp3", duration: 145 },
-  { url: "https://cdn.pixabay.com/audio/2022/03/15/audio_c8c8a73467.mp3", duration: 167 },
+  { url: "https://www.soundhelix.com/examples/mp3/SoundHelix-Song-1.mp3", duration: 372 },
+  { url: "https://www.soundhelix.com/examples/mp3/SoundHelix-Song-2.mp3", duration: 425 },
+  { url: "https://www.soundhelix.com/examples/mp3/SoundHelix-Song-8.mp3", duration: 466 },
+  { url: "https://www.soundhelix.com/examples/mp3/SoundHelix-Song-15.mp3", duration: 412 },
 ];
 
 const COVERS = ["cover-1", "cover-2", "cover-3"];

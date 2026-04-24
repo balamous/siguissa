@@ -1,0 +1,1 @@
+UPDATE public.tracks SET audio_url = 'https://www.soundhelix.com/examples/mp3/SoundHelix-Song-1.mp3', duration_seconds = 372 WHERE audio_url LIKE '%pixabay%';
