@@ -51,10 +51,36 @@ const Create = () => {
   const [tempo, setTempo] = useState("Medium");
   const [language, setLanguage] = useState("English");
   const [generating, setGenerating] = useState(false);
+  const [track, setTrack] = useState<GeneratedTrack | null>(null);
+  const [playing, setPlaying] = useState(false);
+  const [progress, setProgress] = useState(0);
+  const [currentTime, setCurrentTime] = useState(0);
+  const [duration, setDuration] = useState(0);
+  const [unlocking, setUnlocking] = useState(false);
+  const audioRef = useRef<HTMLAudioElement | null>(null);
 
   const cost = profile?.is_premium ? 3 : 5;
+  const unlockCost = profile?.is_premium ? 0 : 3;
   const hasCredits = (profile?.credits ?? 0) >= cost;
   const promptOk = prompt.trim().length >= 3;
+
+  const fmt = (s: number) => {
+    if (!isFinite(s) || s < 0) s = 0;
+    const m = Math.floor(s / 60);
+    const sec = Math.floor(s % 60);
+    return `${m}:${String(sec).padStart(2, "0")}`;
+  };
+
+  // Tear down audio when track changes or component unmounts
+  useEffect(() => {
+    return () => {
+      if (audioRef.current) {
+        audioRef.current.pause();
+        audioRef.current.src = "";
+        audioRef.current = null;
+      }
+    };
+  }, []);
 
   const handleGenerate = async () => {
     if (!promptOk) {
@@ -66,6 +92,18 @@ const Create = () => {
       navigate("/pricing");
       return;
     }
+    // Reset previous preview
+    if (audioRef.current) {
+      audioRef.current.pause();
+      audioRef.current.src = "";
+      audioRef.current = null;
+    }
+    setPlaying(false);
+    setProgress(0);
+    setCurrentTime(0);
+    setDuration(0);
+    setTrack(null);
+
     setGenerating(true);
     try {
       const { data, error } = await supabase.functions.invoke("generate-music", {
@@ -73,15 +111,132 @@ const Create = () => {
       });
       if (error) throw error;
       if ((data as { error?: string })?.error) throw new Error((data as { error: string }).error);
+      const newTrack = (data as { track: GeneratedTrack }).track;
       await refreshProfile();
-      toast.success("Track ready!", { description: `${cost} credits used.` });
-      navigate("/library");
+      setTrack(newTrack);
+      toast.success("Track ready!", { description: `${cost} credits used. Hit play to preview.` });
     } catch (e) {
       const msg = e instanceof Error ? e.message : "Generation failed";
       toast.error(msg);
     } finally {
       setGenerating(false);
     }
+  };
+
+  const togglePlay = async () => {
+    if (!track?.audio_url) return;
+    if (playing && audioRef.current) {
+      audioRef.current.pause();
+      setPlaying(false);
+      return;
+    }
+    if (audioRef.current) {
+      audioRef.current.pause();
+      audioRef.current.src = "";
+      audioRef.current = null;
+    }
+    const audio = new Audio();
+    audio.preload = "auto";
+    audio.src = track.audio_url;
+    audioRef.current = audio;
+
+    audio.addEventListener("loadedmetadata", () => {
+      if (isFinite(audio.duration)) setDuration(audio.duration);
+    });
+    audio.addEventListener("timeupdate", () => {
+      setCurrentTime(audio.currentTime);
+      if (audio.duration && isFinite(audio.duration)) {
+        setProgress(audio.currentTime / audio.duration);
+      }
+    });
+    audio.addEventListener("ended", () => {
+      setPlaying(false);
+      setProgress(0);
+      setCurrentTime(0);
+    });
+    audio.addEventListener("error", () => {
+      if (audioRef.current === audio) {
+        toast.error("Couldn't play track", { description: "Audio source unavailable." });
+        setPlaying(false);
+      }
+    });
+
+    try {
+      await audio.play();
+      if (audioRef.current === audio) {
+        setPlaying(true);
+        setDuration(isFinite(audio.duration) ? audio.duration : 0);
+      }
+    } catch (err) {
+      const name = (err as { name?: string })?.name;
+      if (name === "AbortError") return;
+      const msg = err instanceof Error ? err.message : "Playback blocked";
+      toast.error("Playback failed", { description: msg });
+      if (audioRef.current === audio) {
+        audioRef.current = null;
+        setPlaying(false);
+      }
+    }
+  };
+
+  const seek = (ratio: number) => {
+    if (!audioRef.current) return;
+    const d = audioRef.current.duration;
+    if (!isFinite(d) || d <= 0) return;
+    const clamped = Math.max(0, Math.min(1, ratio));
+    audioRef.current.currentTime = clamped * d;
+    setProgress(clamped);
+    setCurrentTime(clamped * d);
+  };
+
+  const handleUnlock = async () => {
+    if (!track) return;
+    setUnlocking(true);
+    try {
+      const { data, error } = await supabase.functions.invoke("unlock-track", { body: { trackId: track.id } });
+      if (error) throw error;
+      if ((data as { error?: string })?.error) throw new Error((data as { error: string }).error);
+      const updated = (data as { track: GeneratedTrack }).track;
+      await refreshProfile();
+      setTrack(updated);
+      toast.success("Track unlocked", { description: "HQ master ready to download." });
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : "Failed to unlock";
+      toast.error(msg);
+    } finally {
+      setUnlocking(false);
+    }
+  };
+
+  const handleDownload = async () => {
+    if (!track?.is_unlocked || !track.audio_url) return;
+    try {
+      const res = await fetch(track.audio_url);
+      const blob = await res.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `${track.title}.mp3`;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      URL.revokeObjectURL(url);
+    } catch {
+      toast.error("Download failed");
+    }
+  };
+
+  const startNew = () => {
+    if (audioRef.current) {
+      audioRef.current.pause();
+      audioRef.current.src = "";
+      audioRef.current = null;
+    }
+    setTrack(null);
+    setPlaying(false);
+    setProgress(0);
+    setCurrentTime(0);
+    setDuration(0);
   };
 
   return (
