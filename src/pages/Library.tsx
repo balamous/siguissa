@@ -223,7 +223,17 @@ const Library = () => {
                     {t.genre} · {t.mood} · {Math.floor(t.duration_seconds / 60)}:{String(t.duration_seconds % 60).padStart(2, "0")}
                   </div>
                   <div className="mt-2 hidden sm:block">
-                    <Waveform bars={48} seed={t.id} playing={isPlaying} progress={isPlaying ? progress : 0} className="h-6" />
+                    {isPlaying ? (
+                      <Seekbar
+                        progress={progress}
+                        currentTime={currentTime}
+                        duration={duration || t.duration_seconds}
+                        onSeek={(r) => seek(t, r)}
+                        fmt={fmt}
+                      />
+                    ) : (
+                      <Waveform bars={48} seed={t.id} playing={false} progress={0} className="h-6" />
+                    )}
                   </div>
                 </div>
 
