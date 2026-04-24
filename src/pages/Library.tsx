@@ -222,17 +222,24 @@ const Library = () => {
                   <div className="text-xs text-muted-foreground mt-0.5">
                     {t.genre} · {t.mood} · {Math.floor(t.duration_seconds / 60)}:{String(t.duration_seconds % 60).padStart(2, "0")}
                   </div>
-                  <div className="mt-2 hidden sm:block">
-                    {isPlaying ? (
-                      <Seekbar
-                        progress={progress}
-                        currentTime={currentTime}
-                        duration={duration || t.duration_seconds}
-                        onSeek={(r) => seek(t, r)}
-                        fmt={fmt}
-                      />
-                    ) : (
-                      <Waveform bars={48} seed={t.id} playing={false} progress={0} className="h-6" />
+                  <div className="mt-2 hidden sm:flex items-center gap-3">
+                    {isPlaying && (
+                      <span className="text-[10px] tabular-nums text-muted-foreground w-9 text-right">
+                        {fmt(currentTime)}
+                      </span>
+                    )}
+                    <Waveform
+                      bars={48}
+                      seed={t.id}
+                      playing={isPlaying}
+                      progress={isPlaying ? progress : 0}
+                      onSeek={isPlaying ? (r) => seek(t, r) : undefined}
+                      className="h-8 flex-1"
+                    />
+                    {isPlaying && (
+                      <span className="text-[10px] tabular-nums text-muted-foreground w-9">
+                        {fmt(duration || t.duration_seconds)}
+                      </span>
                     )}
                   </div>
                 </div>
