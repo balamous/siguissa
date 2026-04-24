@@ -50,39 +50,59 @@ const Library = () => {
       toast.error("No audio available for this track");
       return;
     }
+    // Toggle off if same track
     if (playingId === track.id && audioRef.current) {
       audioRef.current.pause();
       setPlayingId(null);
       return;
     }
+    // Stop & fully tear down any previous audio so its play() promise rejects cleanly
     if (audioRef.current) {
       audioRef.current.pause();
       audioRef.current.src = "";
+      audioRef.current.load();
+      audioRef.current = null;
     }
+
     const audio = new Audio();
-    audio.crossOrigin = "anonymous";
     audio.preload = "auto";
     audio.src = track.audio_url;
     audioRef.current = audio;
+
     audio.addEventListener("timeupdate", () => {
-      setProgress(audio.currentTime / (audio.duration || 1));
+      if (audio.duration && isFinite(audio.duration)) {
+        setProgress(audio.currentTime / audio.duration);
+      }
     });
     audio.addEventListener("ended", () => {
-      setPlayingId(null);
+      setPlayingId((id) => (id === track.id ? null : id));
       setProgress(0);
     });
     audio.addEventListener("error", () => {
-      toast.error("Couldn't play track", { description: "Audio source unavailable. Try again." });
-      setPlayingId(null);
+      // Only surface if this audio is still the current one
+      if (audioRef.current === audio) {
+        toast.error("Couldn't play track", { description: "Audio source unavailable." });
+        setPlayingId(null);
+      }
     });
-    setPlayingId(track.id);
-    setProgress(0);
+
     try {
       await audio.play();
+      // Only commit state if this audio is still the active one
+      if (audioRef.current === audio) {
+        setPlayingId(track.id);
+        setProgress(0);
+      }
     } catch (err) {
+      // Ignore AbortError caused by a newer play() superseding this one
+      const name = (err as { name?: string })?.name;
+      if (name === "AbortError") return;
       const msg = err instanceof Error ? err.message : "Playback blocked";
       toast.error("Playback failed", { description: msg });
-      setPlayingId(null);
+      if (audioRef.current === audio) {
+        audioRef.current = null;
+        setPlayingId(null);
+      }
     }
   };
 
