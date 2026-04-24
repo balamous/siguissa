@@ -45,15 +45,24 @@ const Library = () => {
     load();
   }, []);
 
-  const togglePlay = (track: Track) => {
-    if (!track.audio_url) return;
+  const togglePlay = async (track: Track) => {
+    if (!track.audio_url) {
+      toast.error("No audio available for this track");
+      return;
+    }
     if (playingId === track.id && audioRef.current) {
       audioRef.current.pause();
       setPlayingId(null);
       return;
     }
-    if (audioRef.current) audioRef.current.pause();
-    const audio = new Audio(track.audio_url);
+    if (audioRef.current) {
+      audioRef.current.pause();
+      audioRef.current.src = "";
+    }
+    const audio = new Audio();
+    audio.crossOrigin = "anonymous";
+    audio.preload = "auto";
+    audio.src = track.audio_url;
     audioRef.current = audio;
     audio.addEventListener("timeupdate", () => {
       setProgress(audio.currentTime / (audio.duration || 1));
@@ -62,9 +71,19 @@ const Library = () => {
       setPlayingId(null);
       setProgress(0);
     });
-    audio.play();
+    audio.addEventListener("error", () => {
+      toast.error("Couldn't play track", { description: "Audio source unavailable. Try again." });
+      setPlayingId(null);
+    });
     setPlayingId(track.id);
     setProgress(0);
+    try {
+      await audio.play();
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : "Playback blocked";
+      toast.error("Playback failed", { description: msg });
+      setPlayingId(null);
+    }
   };
 
   const handleUnlock = async (track: Track) => {
