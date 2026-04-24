@@ -1,1 +1,10 @@
 project_id = "lrlxpgknpmioxqotbhpc"
+
+[functions.generate-music]
+verify_jwt = false
+
+[functions.unlock-track]
+verify_jwt = false
+
+[functions.mock-checkout]
+verify_jwt = false
