@@ -444,7 +444,7 @@ const Create = () => {
               disabled={generating}
             >
               {generating ? (
-                <><Loader2 className="h-5 w-5 animate-spin" /> Generating...</>
+                <><Loader2 className="h-5 w-5 animate-spin" /> Generating… {fmt(elapsed)}</>
               ) : track ? (
                 <><Sparkles className="h-5 w-5" /> Generate another</>
               ) : (
