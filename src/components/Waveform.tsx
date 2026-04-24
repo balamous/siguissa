@@ -1,4 +1,4 @@
-import { useMemo, useRef } from "react";
+import { forwardRef, useMemo, useRef } from "react";
 import { cn } from "@/lib/utils";
 
 interface WaveformProps {
@@ -10,14 +10,14 @@ interface WaveformProps {
   onSeek?: (ratio: number) => void;
 }
 
-export const Waveform = ({
+export const Waveform = forwardRef<HTMLDivElement, WaveformProps>(({
   bars = 64,
   playing = false,
   progress = 0,
   className,
   seed = "x",
   onSeek,
-}: WaveformProps) => {
+}, _forwardedRef) => {
   const trackRef = useRef<HTMLDivElement | null>(null);
   const draggingRef = useRef(false);
 
@@ -97,4 +97,5 @@ export const Waveform = ({
       })}
     </div>
   );
-};
+});
+Waveform.displayName = "Waveform";
