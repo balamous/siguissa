@@ -222,17 +222,24 @@ const Library = () => {
                   <div className="text-xs text-muted-foreground mt-0.5">
                     {t.genre} · {t.mood} · {Math.floor(t.duration_seconds / 60)}:{String(t.duration_seconds % 60).padStart(2, "0")}
                   </div>
-                  <div className="mt-2 hidden sm:block">
-                    {isPlaying ? (
-                      <Seekbar
-                        progress={progress}
-                        currentTime={currentTime}
-                        duration={duration || t.duration_seconds}
-                        onSeek={(r) => seek(t, r)}
-                        fmt={fmt}
-                      />
-                    ) : (
-                      <Waveform bars={48} seed={t.id} playing={false} progress={0} className="h-6" />
+                  <div className="mt-2 hidden sm:flex items-center gap-3">
+                    {isPlaying && (
+                      <span className="text-[10px] tabular-nums text-muted-foreground w-9 text-right">
+                        {fmt(currentTime)}
+                      </span>
+                    )}
+                    <Waveform
+                      bars={48}
+                      seed={t.id}
+                      playing={isPlaying}
+                      progress={isPlaying ? progress : 0}
+                      onSeek={isPlaying ? (r) => seek(t, r) : undefined}
+                      className="h-8 flex-1"
+                    />
+                    {isPlaying && (
+                      <span className="text-[10px] tabular-nums text-muted-foreground w-9">
+                        {fmt(duration || t.duration_seconds)}
+                      </span>
                     )}
                   </div>
                 </div>
@@ -262,78 +269,5 @@ const Library = () => {
   );
 };
 
-const Seekbar = ({
-  progress,
-  currentTime,
-  duration,
-  onSeek,
-  fmt,
-}: {
-  progress: number;
-  currentTime: number;
-  duration: number;
-  onSeek: (ratio: number) => void;
-  fmt: (s: number) => string;
-}) => {
-  const trackRef = useRef<HTMLDivElement | null>(null);
-  const draggingRef = useRef(false);
-
-  const seekFromEvent = (clientX: number) => {
-    const el = trackRef.current;
-    if (!el) return;
-    const rect = el.getBoundingClientRect();
-    onSeek((clientX - rect.left) / rect.width);
-  };
-
-  const handlePointerDown = (e: React.PointerEvent<HTMLDivElement>) => {
-    draggingRef.current = true;
-    (e.target as HTMLElement).setPointerCapture?.(e.pointerId);
-    seekFromEvent(e.clientX);
-  };
-  const handlePointerMove = (e: React.PointerEvent<HTMLDivElement>) => {
-    if (!draggingRef.current) return;
-    seekFromEvent(e.clientX);
-  };
-  const handlePointerUp = (e: React.PointerEvent<HTMLDivElement>) => {
-    draggingRef.current = false;
-    (e.target as HTMLElement).releasePointerCapture?.(e.pointerId);
-  };
-
-  const pct = Math.max(0, Math.min(100, progress * 100));
-
-  return (
-    <div className="flex items-center gap-3">
-      <span className="text-[10px] tabular-nums text-muted-foreground w-9 text-right">
-        {fmt(currentTime)}
-      </span>
-      <div
-        ref={trackRef}
-        onPointerDown={handlePointerDown}
-        onPointerMove={handlePointerMove}
-        onPointerUp={handlePointerUp}
-        onPointerCancel={handlePointerUp}
-        role="slider"
-        aria-label="Seek"
-        aria-valuemin={0}
-        aria-valuemax={100}
-        aria-valuenow={Math.round(pct)}
-        tabIndex={0}
-        className="relative flex-1 h-2 rounded-full bg-muted/60 cursor-pointer group/seek touch-none"
-      >
-        <div
-          className="absolute inset-y-0 left-0 rounded-full bg-gradient-to-r from-primary to-primary-glow"
-          style={{ width: `${pct}%` }}
-        />
-        <div
-          className="absolute top-1/2 -translate-y-1/2 -translate-x-1/2 h-3.5 w-3.5 rounded-full bg-primary-glow shadow-glow opacity-0 group-hover/seek:opacity-100 transition-opacity"
-          style={{ left: `${pct}%` }}
-        />
-      </div>
-      <span className="text-[10px] tabular-nums text-muted-foreground w-9">
-        {fmt(duration)}
-      </span>
-    </div>
-  );
-};
-
 export default Library;
+
