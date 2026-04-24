@@ -88,7 +88,11 @@ const Library = () => {
     audio.src = track.audio_url;
     audioRef.current = audio;
 
+    audio.addEventListener("loadedmetadata", () => {
+      if (isFinite(audio.duration)) setDuration(audio.duration);
+    });
     audio.addEventListener("timeupdate", () => {
+      setCurrentTime(audio.currentTime);
       if (audio.duration && isFinite(audio.duration)) {
         setProgress(audio.currentTime / audio.duration);
       }
@@ -96,6 +100,7 @@ const Library = () => {
     audio.addEventListener("ended", () => {
       setPlayingId((id) => (id === track.id ? null : id));
       setProgress(0);
+      setCurrentTime(0);
     });
     audio.addEventListener("error", () => {
       // Only surface if this audio is still the current one
@@ -111,6 +116,8 @@ const Library = () => {
       if (audioRef.current === audio) {
         setPlayingId(track.id);
         setProgress(0);
+        setCurrentTime(0);
+        setDuration(isFinite(audio.duration) ? audio.duration : 0);
       }
     } catch (err) {
       // Ignore AbortError caused by a newer play() superseding this one
