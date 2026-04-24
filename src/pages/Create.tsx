@@ -169,7 +169,7 @@ const Create = () => {
               variant="hero"
               size="xl"
               className="w-full mt-5"
-              disabled={!canGenerate || generating}
+              disabled={generating}
             >
               {generating ? (
                 <><Loader2 className="h-5 w-5 animate-spin" /> Generating...</>
