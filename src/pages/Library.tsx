@@ -31,8 +31,27 @@ const Library = () => {
   const [loading, setLoading] = useState(true);
   const [playingId, setPlayingId] = useState<string | null>(null);
   const [progress, setProgress] = useState(0);
+  const [currentTime, setCurrentTime] = useState(0);
+  const [duration, setDuration] = useState(0);
   const [unlockingId, setUnlockingId] = useState<string | null>(null);
   const audioRef = useRef<HTMLAudioElement | null>(null);
+
+  const fmt = (s: number) => {
+    if (!isFinite(s) || s < 0) s = 0;
+    const m = Math.floor(s / 60);
+    const sec = Math.floor(s % 60);
+    return `${m}:${String(sec).padStart(2, "0")}`;
+  };
+
+  const seek = (track: Track, ratio: number) => {
+    if (playingId !== track.id || !audioRef.current) return;
+    const d = audioRef.current.duration;
+    if (!isFinite(d) || d <= 0) return;
+    const clamped = Math.max(0, Math.min(1, ratio));
+    audioRef.current.currentTime = clamped * d;
+    setProgress(clamped);
+    setCurrentTime(clamped * d);
+  };
 
   const load = async () => {
     setLoading(true);
@@ -69,7 +88,11 @@ const Library = () => {
     audio.src = track.audio_url;
     audioRef.current = audio;
 
+    audio.addEventListener("loadedmetadata", () => {
+      if (isFinite(audio.duration)) setDuration(audio.duration);
+    });
     audio.addEventListener("timeupdate", () => {
+      setCurrentTime(audio.currentTime);
       if (audio.duration && isFinite(audio.duration)) {
         setProgress(audio.currentTime / audio.duration);
       }
@@ -77,6 +100,7 @@ const Library = () => {
     audio.addEventListener("ended", () => {
       setPlayingId((id) => (id === track.id ? null : id));
       setProgress(0);
+      setCurrentTime(0);
     });
     audio.addEventListener("error", () => {
       // Only surface if this audio is still the current one
@@ -92,6 +116,8 @@ const Library = () => {
       if (audioRef.current === audio) {
         setPlayingId(track.id);
         setProgress(0);
+        setCurrentTime(0);
+        setDuration(isFinite(audio.duration) ? audio.duration : 0);
       }
     } catch (err) {
       // Ignore AbortError caused by a newer play() superseding this one
@@ -197,7 +223,17 @@ const Library = () => {
                     {t.genre} · {t.mood} · {Math.floor(t.duration_seconds / 60)}:{String(t.duration_seconds % 60).padStart(2, "0")}
                   </div>
                   <div className="mt-2 hidden sm:block">
-                    <Waveform bars={48} seed={t.id} playing={isPlaying} progress={isPlaying ? progress : 0} className="h-6" />
+                    {isPlaying ? (
+                      <Seekbar
+                        progress={progress}
+                        currentTime={currentTime}
+                        duration={duration || t.duration_seconds}
+                        onSeek={(r) => seek(t, r)}
+                        fmt={fmt}
+                      />
+                    ) : (
+                      <Waveform bars={48} seed={t.id} playing={false} progress={0} className="h-6" />
+                    )}
                   </div>
                 </div>
 
@@ -222,6 +258,80 @@ const Library = () => {
           })}
         </div>
       )}
+    </div>
+  );
+};
+
+const Seekbar = ({
+  progress,
+  currentTime,
+  duration,
+  onSeek,
+  fmt,
+}: {
+  progress: number;
+  currentTime: number;
+  duration: number;
+  onSeek: (ratio: number) => void;
+  fmt: (s: number) => string;
+}) => {
+  const trackRef = useRef<HTMLDivElement | null>(null);
+  const draggingRef = useRef(false);
+
+  const seekFromEvent = (clientX: number) => {
+    const el = trackRef.current;
+    if (!el) return;
+    const rect = el.getBoundingClientRect();
+    onSeek((clientX - rect.left) / rect.width);
+  };
+
+  const handlePointerDown = (e: React.PointerEvent<HTMLDivElement>) => {
+    draggingRef.current = true;
+    (e.target as HTMLElement).setPointerCapture?.(e.pointerId);
+    seekFromEvent(e.clientX);
+  };
+  const handlePointerMove = (e: React.PointerEvent<HTMLDivElement>) => {
+    if (!draggingRef.current) return;
+    seekFromEvent(e.clientX);
+  };
+  const handlePointerUp = (e: React.PointerEvent<HTMLDivElement>) => {
+    draggingRef.current = false;
+    (e.target as HTMLElement).releasePointerCapture?.(e.pointerId);
+  };
+
+  const pct = Math.max(0, Math.min(100, progress * 100));
+
+  return (
+    <div className="flex items-center gap-3">
+      <span className="text-[10px] tabular-nums text-muted-foreground w-9 text-right">
+        {fmt(currentTime)}
+      </span>
+      <div
+        ref={trackRef}
+        onPointerDown={handlePointerDown}
+        onPointerMove={handlePointerMove}
+        onPointerUp={handlePointerUp}
+        onPointerCancel={handlePointerUp}
+        role="slider"
+        aria-label="Seek"
+        aria-valuemin={0}
+        aria-valuemax={100}
+        aria-valuenow={Math.round(pct)}
+        tabIndex={0}
+        className="relative flex-1 h-2 rounded-full bg-muted/60 cursor-pointer group/seek touch-none"
+      >
+        <div
+          className="absolute inset-y-0 left-0 rounded-full bg-gradient-to-r from-primary to-primary-glow"
+          style={{ width: `${pct}%` }}
+        />
+        <div
+          className="absolute top-1/2 -translate-y-1/2 -translate-x-1/2 h-3.5 w-3.5 rounded-full bg-primary-glow shadow-glow opacity-0 group-hover/seek:opacity-100 transition-opacity"
+          style={{ left: `${pct}%` }}
+        />
+      </div>
+      <span className="text-[10px] tabular-nums text-muted-foreground w-9">
+        {fmt(duration)}
+      </span>
     </div>
   );
 };
