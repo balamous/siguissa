@@ -1,15 +1,32 @@
-import { useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { useEffect, useRef, useState } from "react";
+import { Link, useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
-import { Sparkles, Loader2, Coins, Music2 } from "lucide-react";
+import { Sparkles, Loader2, Coins, Music2, Play, Pause, Lock, Download, Library as LibraryIcon } from "lucide-react";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import { Waveform } from "@/components/Waveform";
+import cover1 from "@/assets/cover-1.jpg";
+import cover2 from "@/assets/cover-2.jpg";
+import cover3 from "@/assets/cover-3.jpg";
+
+const COVERS: Record<string, string> = { "cover-1": cover1, "cover-2": cover2, "cover-3": cover3 };
+
+type GeneratedTrack = {
+  id: string;
+  title: string;
+  genre: string | null;
+  mood: string | null;
+  prompt: string;
+  audio_url: string | null;
+  cover_url: string | null;
+  duration_seconds: number;
+  is_unlocked: boolean;
+};
 
 const GENRES = ["Afrobeat", "Drill", "Gospel", "Rap", "RnB", "Amapiano", "Reggae", "Pop", "Lo-fi", "House"];
 const MOODS = ["Happy", "Sad", "Spiritual", "Party", "Romantic", "Dark", "Hopeful", "Energetic"];
@@ -34,10 +51,36 @@ const Create = () => {
   const [tempo, setTempo] = useState("Medium");
   const [language, setLanguage] = useState("English");
   const [generating, setGenerating] = useState(false);
+  const [track, setTrack] = useState<GeneratedTrack | null>(null);
+  const [playing, setPlaying] = useState(false);
+  const [progress, setProgress] = useState(0);
+  const [currentTime, setCurrentTime] = useState(0);
+  const [duration, setDuration] = useState(0);
+  const [unlocking, setUnlocking] = useState(false);
+  const audioRef = useRef<HTMLAudioElement | null>(null);
 
   const cost = profile?.is_premium ? 3 : 5;
+  const unlockCost = profile?.is_premium ? 0 : 3;
   const hasCredits = (profile?.credits ?? 0) >= cost;
   const promptOk = prompt.trim().length >= 3;
+
+  const fmt = (s: number) => {
+    if (!isFinite(s) || s < 0) s = 0;
+    const m = Math.floor(s / 60);
+    const sec = Math.floor(s % 60);
+    return `${m}:${String(sec).padStart(2, "0")}`;
+  };
+
+  // Tear down audio when track changes or component unmounts
+  useEffect(() => {
+    return () => {
+      if (audioRef.current) {
+        audioRef.current.pause();
+        audioRef.current.src = "";
+        audioRef.current = null;
+      }
+    };
+  }, []);
 
   const handleGenerate = async () => {
     if (!promptOk) {
@@ -49,6 +92,18 @@ const Create = () => {
       navigate("/pricing");
       return;
     }
+    // Reset previous preview
+    if (audioRef.current) {
+      audioRef.current.pause();
+      audioRef.current.src = "";
+      audioRef.current = null;
+    }
+    setPlaying(false);
+    setProgress(0);
+    setCurrentTime(0);
+    setDuration(0);
+    setTrack(null);
+
     setGenerating(true);
     try {
       const { data, error } = await supabase.functions.invoke("generate-music", {
@@ -56,15 +111,132 @@ const Create = () => {
       });
       if (error) throw error;
       if ((data as { error?: string })?.error) throw new Error((data as { error: string }).error);
+      const newTrack = (data as { track: GeneratedTrack }).track;
       await refreshProfile();
-      toast.success("Track ready!", { description: `${cost} credits used.` });
-      navigate("/library");
+      setTrack(newTrack);
+      toast.success("Track ready!", { description: `${cost} credits used. Hit play to preview.` });
     } catch (e) {
       const msg = e instanceof Error ? e.message : "Generation failed";
       toast.error(msg);
     } finally {
       setGenerating(false);
     }
+  };
+
+  const togglePlay = async () => {
+    if (!track?.audio_url) return;
+    if (playing && audioRef.current) {
+      audioRef.current.pause();
+      setPlaying(false);
+      return;
+    }
+    if (audioRef.current) {
+      audioRef.current.pause();
+      audioRef.current.src = "";
+      audioRef.current = null;
+    }
+    const audio = new Audio();
+    audio.preload = "auto";
+    audio.src = track.audio_url;
+    audioRef.current = audio;
+
+    audio.addEventListener("loadedmetadata", () => {
+      if (isFinite(audio.duration)) setDuration(audio.duration);
+    });
+    audio.addEventListener("timeupdate", () => {
+      setCurrentTime(audio.currentTime);
+      if (audio.duration && isFinite(audio.duration)) {
+        setProgress(audio.currentTime / audio.duration);
+      }
+    });
+    audio.addEventListener("ended", () => {
+      setPlaying(false);
+      setProgress(0);
+      setCurrentTime(0);
+    });
+    audio.addEventListener("error", () => {
+      if (audioRef.current === audio) {
+        toast.error("Couldn't play track", { description: "Audio source unavailable." });
+        setPlaying(false);
+      }
+    });
+
+    try {
+      await audio.play();
+      if (audioRef.current === audio) {
+        setPlaying(true);
+        setDuration(isFinite(audio.duration) ? audio.duration : 0);
+      }
+    } catch (err) {
+      const name = (err as { name?: string })?.name;
+      if (name === "AbortError") return;
+      const msg = err instanceof Error ? err.message : "Playback blocked";
+      toast.error("Playback failed", { description: msg });
+      if (audioRef.current === audio) {
+        audioRef.current = null;
+        setPlaying(false);
+      }
+    }
+  };
+
+  const seek = (ratio: number) => {
+    if (!audioRef.current) return;
+    const d = audioRef.current.duration;
+    if (!isFinite(d) || d <= 0) return;
+    const clamped = Math.max(0, Math.min(1, ratio));
+    audioRef.current.currentTime = clamped * d;
+    setProgress(clamped);
+    setCurrentTime(clamped * d);
+  };
+
+  const handleUnlock = async () => {
+    if (!track) return;
+    setUnlocking(true);
+    try {
+      const { data, error } = await supabase.functions.invoke("unlock-track", { body: { trackId: track.id } });
+      if (error) throw error;
+      if ((data as { error?: string })?.error) throw new Error((data as { error: string }).error);
+      const updated = (data as { track: GeneratedTrack }).track;
+      await refreshProfile();
+      setTrack(updated);
+      toast.success("Track unlocked", { description: "HQ master ready to download." });
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : "Failed to unlock";
+      toast.error(msg);
+    } finally {
+      setUnlocking(false);
+    }
+  };
+
+  const handleDownload = async () => {
+    if (!track?.is_unlocked || !track.audio_url) return;
+    try {
+      const res = await fetch(track.audio_url);
+      const blob = await res.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `${track.title}.mp3`;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      URL.revokeObjectURL(url);
+    } catch {
+      toast.error("Download failed");
+    }
+  };
+
+  const startNew = () => {
+    if (audioRef.current) {
+      audioRef.current.pause();
+      audioRef.current.src = "";
+      audioRef.current = null;
+    }
+    setTrack(null);
+    setPlaying(false);
+    setProgress(0);
+    setCurrentTime(0);
+    setDuration(0);
   };
 
   return (
@@ -141,17 +313,100 @@ const Create = () => {
 
         {/* Sticky sidebar */}
         <aside className="lg:sticky lg:top-6 h-fit space-y-4">
-          <div className="p-6 rounded-2xl glass relative overflow-hidden">
-            <div className="absolute inset-0 bg-gradient-brand-soft -z-10" aria-hidden />
-            <div className="text-xs text-primary-glow font-semibold uppercase tracking-wider">Preview</div>
-            <h3 className="font-display font-bold text-2xl mt-2 leading-tight">
-              {genre} · {mood}
-            </h3>
-            <div className="text-sm text-muted-foreground mt-1">{tempo} · {language}</div>
-            <div className="mt-5">
-              <Waveform bars={32} seed={`${genre}${mood}${tempo}`} className="h-12" />
+          {track ? (
+            <div className="p-6 rounded-2xl glass relative overflow-hidden animate-in fade-in zoom-in-95 duration-300">
+              <div className="absolute inset-0 bg-gradient-brand-soft -z-10" aria-hidden />
+              <div className="flex items-center gap-2 text-xs text-primary-glow font-semibold uppercase tracking-wider">
+                <span className="h-1.5 w-1.5 rounded-full bg-primary-glow animate-pulse" />
+                Now playing
+              </div>
+              <div className="mt-3 flex items-center gap-4">
+                <button
+                  onClick={togglePlay}
+                  className="relative h-20 w-20 rounded-xl overflow-hidden flex-shrink-0 group/cover"
+                  aria-label={playing ? "Pause" : "Play"}
+                >
+                  <img
+                    src={COVERS[track.cover_url ?? "cover-1"] ?? cover1}
+                    alt={track.title}
+                    className="w-full h-full object-cover"
+                  />
+                  <div className="absolute inset-0 bg-black/40 grid place-items-center opacity-100 group-hover/cover:bg-black/55 transition-colors">
+                    {playing ? (
+                      <Pause className="h-7 w-7 text-white" fill="currentColor" />
+                    ) : (
+                      <Play className="h-7 w-7 text-white ml-0.5" fill="currentColor" />
+                    )}
+                  </div>
+                </button>
+                <div className="min-w-0 flex-1">
+                  <div className="font-display font-bold truncate">{track.title}</div>
+                  <div className="text-xs text-muted-foreground mt-0.5 truncate">
+                    {track.genre} · {track.mood}
+                  </div>
+                  {track.is_unlocked && (
+                    <span className="inline-block mt-1 text-[10px] px-1.5 py-0.5 rounded bg-primary/20 text-primary-glow font-semibold">
+                      HQ
+                    </span>
+                  )}
+                </div>
+              </div>
+
+              <div className="mt-4 flex items-center gap-2">
+                <span className="text-[10px] tabular-nums text-muted-foreground w-9 text-right">
+                  {fmt(currentTime)}
+                </span>
+                <Waveform
+                  bars={40}
+                  seed={track.id}
+                  playing={playing}
+                  progress={progress}
+                  onSeek={seek}
+                  className="h-10 flex-1"
+                />
+                <span className="text-[10px] tabular-nums text-muted-foreground w-9">
+                  {fmt(duration || track.duration_seconds)}
+                </span>
+              </div>
+
+              <div className="mt-5 grid grid-cols-2 gap-2">
+                {track.is_unlocked ? (
+                  <Button onClick={handleDownload} variant="hero" className="col-span-2">
+                    <Download className="h-4 w-4" /> Download HQ
+                  </Button>
+                ) : (
+                  <Button onClick={handleUnlock} variant="hero" className="col-span-2" disabled={unlocking}>
+                    {unlocking ? <Loader2 className="h-4 w-4 animate-spin" /> : <Lock className="h-4 w-4" />}
+                    Unlock & download {unlockCost > 0 ? `· ${unlockCost}` : ""}
+                  </Button>
+                )}
+                <Button onClick={startNew} variant="glass" size="sm">
+                  <Sparkles className="h-4 w-4" /> New
+                </Button>
+                <Button asChild variant="glass" size="sm">
+                  <Link to="/library"><LibraryIcon className="h-4 w-4" /> Library</Link>
+                </Button>
+              </div>
             </div>
-          </div>
+          ) : (
+            <div className="p-6 rounded-2xl glass relative overflow-hidden">
+              <div className="absolute inset-0 bg-gradient-brand-soft -z-10" aria-hidden />
+              <div className="text-xs text-primary-glow font-semibold uppercase tracking-wider">Preview</div>
+              <h3 className="font-display font-bold text-2xl mt-2 leading-tight">
+                {genre} · {mood}
+              </h3>
+              <div className="text-sm text-muted-foreground mt-1">{tempo} · {language}</div>
+              <div className="mt-5">
+                <Waveform bars={32} seed={`${genre}${mood}${tempo}`} playing={generating} className="h-12" />
+              </div>
+              {generating && (
+                <div className="mt-3 text-xs text-muted-foreground flex items-center gap-2">
+                  <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                  Composing your track…
+                </div>
+              )}
+            </div>
+          )}
 
           <div className="p-6 rounded-2xl glass">
             <div className="flex items-center justify-between text-sm">
@@ -173,6 +428,8 @@ const Create = () => {
             >
               {generating ? (
                 <><Loader2 className="h-5 w-5 animate-spin" /> Generating...</>
+              ) : track ? (
+                <><Sparkles className="h-5 w-5" /> Generate another</>
               ) : (
                 <><Sparkles className="h-5 w-5" /> Generate track</>
               )}
