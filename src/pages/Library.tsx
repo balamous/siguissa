@@ -31,8 +31,27 @@ const Library = () => {
   const [loading, setLoading] = useState(true);
   const [playingId, setPlayingId] = useState<string | null>(null);
   const [progress, setProgress] = useState(0);
+  const [currentTime, setCurrentTime] = useState(0);
+  const [duration, setDuration] = useState(0);
   const [unlockingId, setUnlockingId] = useState<string | null>(null);
   const audioRef = useRef<HTMLAudioElement | null>(null);
+
+  const fmt = (s: number) => {
+    if (!isFinite(s) || s < 0) s = 0;
+    const m = Math.floor(s / 60);
+    const sec = Math.floor(s % 60);
+    return `${m}:${String(sec).padStart(2, "0")}`;
+  };
+
+  const seek = (track: Track, ratio: number) => {
+    if (playingId !== track.id || !audioRef.current) return;
+    const d = audioRef.current.duration;
+    if (!isFinite(d) || d <= 0) return;
+    const clamped = Math.max(0, Math.min(1, ratio));
+    audioRef.current.currentTime = clamped * d;
+    setProgress(clamped);
+    setCurrentTime(clamped * d);
+  };
 
   const load = async () => {
     setLoading(true);
